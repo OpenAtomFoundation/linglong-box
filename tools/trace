@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# NOTE:
+# Use /usr/bin/env to find shell interpreter for better portability.
+# Reference: https://en.wikipedia.org/wiki/Shebang_%28Unix%29#Portability
+
+# NOTE:
+# Exit immediately if any commands (even in pipeline)
+# exits with a non-zero status.
+set -e
+set -o pipefail
+
+# WARNING:
+# This is not reliable when using POSIX sh
+# and current script file is sourced by `source` or `.`
+CURRENT_SOURCE_FILE_PATH="${BASH_SOURCE[0]:-$0}"
+CURRENT_SOURCE_FILE_NAME="$(basename -- "$CURRENT_SOURCE_FILE_PATH")"
+
+# shellcheck disable=SC2016
+USAGE="$CURRENT_SOURCE_FILE_NAME"'
+
+A ftrace util script used to debug OCI runtime.
+
+Say you have a running container with PID 1234, and you want to trace
+function_graph of `do_mount` in kernel, you can run:
+
+  $ sudo '"$CURRENT_SOURCE_FILE_NAME"' function_graph 1234 do_mount
+
+Press enter to stop tracing and print the trace.
+
+'"
+Usage:
+  $CURRENT_SOURCE_FILE_NAME -h
+  $CURRENT_SOURCE_FILE_NAME <FUNCTION> <OUTPUT> <PID>
+
+Options:
+  -h	Show this screen."
+
+CURRENT_SOURCE_FILE_DIR="$(dirname -- "$CURRENT_SOURCE_FILE_PATH")"
+
+# This function log messages to stderr works like printf
+# with a prefix of the current script name.
+# Arguments:
+#   $1 - The format string.
+#   $@ - Arguments to the format string, just like printf.
+function log() {
+	local format="$1"
+	shift
+	# shellcheck disable=SC2059
+	printf "$CURRENT_SOURCE_FILE_NAME: $format\n" "$@" >&2 || true
+}
+
+function main() {
+	while getopts ':h' option; do
+		case "$option" in
+		h)
+			echo "$USAGE"
+			exit
+			;;
+		\?)
+			log "[ERROR] Unknown option: -%s" "$OPTARG"
+			exit 1
+			;;
+		esac
+	done
+	shift $((OPTIND - 1))
+
+	if [ "$(id -u)" -ne 0 ]; then
+		log "[ERROR] Please run as root"
+		exit 1
+	fi
+
+	if [ ! -d /sys/kernel/debug/tracing ]; then
+		log "[ERROR] ftrace is not enabled"
+		exit 1
+	fi
+
+	FUNCTION="$1"
+	shift
+	OUTPUT="$1"
+	shift
+	PID="$1"
+	shift
+
+	log "[INFO] Tracing function %s of PID %s output to %s" \
+		"$FUNCTION" "$PID" "$OUTPUT"
+
+	echo nop >/sys/kernel/debug/tracing/current_tracer
+	echo 0 >/sys/kernel/debug/tracing/tracing_on
+	echo "function_graph" >/sys/kernel/debug/tracing/current_tracer
+	echo "$PID" >/sys/kernel/debug/tracing/set_ftrace_pid
+	echo "$FUNCTION" >/sys/kernel/debug/tracing/set_graph_function
+	echo 1 >/sys/kernel/debug/tracing/tracing_on
+
+	read -r -p "Press enter to stop tracing"
+
+	echo 0 >/sys/kernel/debug/tracing/tracing_on
+	sudo -u "$(logname)" -- tee "$OUTPUT" </sys/kernel/debug/tracing/trace
+	echo nop >/sys/kernel/debug/tracing/current_tracer
+}
+
+main "$@"

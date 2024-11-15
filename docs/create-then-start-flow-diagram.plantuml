@@ -1,0 +1,148 @@
+@startuml
+
+title create, start and delete
+
+!pragma teoz true
+
+skinparam sequenceMessageAlign center
+participant Caller
+
+box "linyaps-box" #LightBlue
+        participant "Container runtime\n(in runtime namespace)" as runtime1
+        participant "Container runtime\n(in container namespace)" as runtime2
+end box
+
+participant "Container process\n(INIT)" as init
+participant Application
+
+activate Caller
+
+Caller -> runtime1 : Op create
+
+activate runtime1
+
+runtime1 -> runtime1 : parse config.json
+
+runtime1 -> runtime1 : validate config.json
+
+runtime1 -> runtime1 : update state
+
+== creating ==
+
+runtime1 -> runtime2 : clone with new namespaces
+
+activate runtime2
+
+runtime2 -> runtime1 : request configure container
+
+runtime1 -> runtime1 : configure uid/gid mappings
+
+runtime1 -> runtime1 : configure container cgroup
+
+runtime1 -> runtime2 : done
+
+runtime2 -> runtime2 : configure other namespaces
+
+runtime2 -> runtime2 : mount default devices
+
+runtime2 -> runtime2 : mount rootfs
+
+runtime2 -> runtime2 : pivot_root
+
+runtime2 -> runtime2 : execute prestart hooks
+
+runtime2 -> runtime1 : prestart result
+
+runtime1 -> runtime1 : execute createRuntime hooks
+
+runtime1 -> runtime2 : createRuntime done
+
+runtime2 -> runtime2 : execute createContainer hooks
+
+runtime2 -> runtime1 : createContainer result
+
+runtime1 -> runtime1 : update state
+
+== created ==
+
+runtime1 -> Caller : done
+
+deactivate runtime1
+
+Caller -> runtime1 : Op start
+
+activate runtime1
+
+runtime1 -> runtime2 : start
+
+runtime2 -> runtime2 : execute startContainer hooks
+
+runtime2 -> runtime1 : startContainer result
+
+runtime2 -> init : exec
+
+& runtime2 -> runtime1 : close socket
+
+deactivate runtime2
+
+activate init
+
+runtime1 -> runtime1 : update state
+
+& init -> Application : fork and exec
+
+activate Application
+
+== running ==
+
+runtime1 -> runtime1 : execute poststart hooks
+
+runtime1 -> Caller : done
+
+deactivate runtime1
+
+Caller -> runtime1 : Op exec
+
+activate runtime1
+
+runtime1 -> runtime2 : clone with existing namespaces
+
+activate runtime2
+
+runtime2 -> Application : fork and exec
+
+activate Application
+
+runtime2 -> runtime1 : done
+
+deactivate runtime2
+
+runtime1 -> Caller : done
+
+deactivate runtime1
+
+Application -> init : SIGCHLD
+
+deactivate Application
+
+Application -> init : SIGCHLD
+
+deactivate Application
+
+deactivate init
+
+== stopped ==
+
+Caller -> runtime1: Op delete
+
+activate runtime1
+
+runtime1 -> runtime1 : delete container
+
+runtime1 -> runtime1 : execute poststop hooks
+
+runtime1 -> Caller : done
+
+deactivate runtime1
+
+@enduml
