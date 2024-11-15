@@ -145,8 +145,8 @@ function run_test() {
 	local IMAGE
 	IMAGE="$("$JQ" -r '.image' "$TEST_FILE")"
 	local IMAGE_DIR="$TEST_DIR/image"
-
-	execute_command "$PODMAN" pull "$IMAGE"
+	
+	"$PODMAN" image exists "$IMAGE" || execute_command "$PODMAN" pull "$IMAGE"
 	execute_command "$PODMAN" save "$IMAGE" --format oci-dir --output "$IMAGE_DIR"
 
 	local BUNDLE
@@ -167,7 +167,7 @@ function run_test() {
 	log "[INFO] ==== COMMAND OUTPUT START ===="
 	local REAL
 	REAL="$(
-		"${TEST_COMMAND[@]}" && :
+		LINYAPS_BOX_LOG_FORCE_STDERR=1 "${TEST_COMMAND[@]}" && :
 	)" && :
 	EXIT_CODE=$?
 	log "[INFO] ==== COMMAND OUTPUT END ======"

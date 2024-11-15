@@ -1,0 +1,11 @@
+# linyaps-box low level design
+
+## flow diagram
+
+```plantuml { include=./create-then-start-flow-diagram.plantuml }
+/'See ./create-then-start-flow-diagram.plantuml'/
+```
+
+```plantuml { include=./run-without-hooks-flow-diagram.plantuml }
+/'See ./run-without-hooks-flow-diagram.plantuml'/
+```
